@@ -1,0 +1,78 @@
+
+name: Run Production Database Migration
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    name: Run Laravel Migrations
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql, pgsql
+          tools: composer
+
+      - name: Install dependencies
+        run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Validate database configuration
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}
+          DB_PORT: ${{ secrets.PRODUCTION_DB_PORT }}
+          DB_DATABASE: ${{ secrets.PRODUCTION_DB_DATABASE }}
+          DB_USERNAME: ${{ secrets.PRODUCTION_DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+        run: |
+          php -r '
+          $required = [
+              "DB_HOST",
+              "DB_PORT",
+              "DB_DATABASE",
+              "DB_USERNAME",
+              "DB_PASSWORD"
+          ];
+
+          foreach ($required as $key) {
+              $value = getenv($key);
+
+              if ($value === false || trim($value) === "") {
+                  fwrite(STDERR, "Missing or empty secret: " . $key . PHP_EOL);
+                  exit(1);
+              }
+          }
+
+          if (!ctype_digit(getenv("DB_PORT"))) {
+              fwrite(STDERR, "DB_PORT must contain only a numeric port, such as 5432." . PHP_EOL);
+              exit(1);
+          }
+
+          echo "Database environment variables are present." . PHP_EOL;
+          '
+
+      - name: Run production migrations
+        env:
+          APP_ENV: production
+          APP_DEBUG: 'false'
+          APP_KEY: ${{ secrets.PRODUCTION_APP_KEY }}
+          DB_CONNECTION: pgsql
+          DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}
+          DB_PORT: ${{ secrets.PRODUCTION_DB_PORT }}
+          DB_DATABASE: ${{ secrets.PRODUCTION_DB_DATABASE }}
+          DB_USERNAME: ${{ secrets.PRODUCTION_DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          DB_SSLMODE: require
+          SESSION_DRIVER: file
+          CACHE_STORE: file
+          QUEUE_CONNECTION: sync
+        run: |
+          php artisan config:clear
+          php artisan migrate --force
