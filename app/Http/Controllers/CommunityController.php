@@ -8,8 +8,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CommunityController extends Controller
 {
@@ -311,7 +313,8 @@ class CommunityController extends Controller
         $this->requireStaff();
         $report = DB::table('reports')->where('id', $id)->firstOrFail();
         $hasAccess = $this->canViewFull($report);
-        $this->maskStaffReport($report, $hasAccess);
+        $canViewDetails = $this->canViewReportDetails($report, $hasAccess);
+        $this->maskStaffReport($report, $canViewDetails);
         $report->resident = $report->is_anonymous || ! $hasAccess
             ? null
             : DB::table('users')->where('id', $report->user_id)->first(['name', 'contact_number', 'email']);
@@ -321,7 +324,7 @@ class CommunityController extends Controller
             ->select('users.id', 'users.name')->distinct()->get();
         app(AuditLogger::class)->record(Auth::id(), 'viewed', 'report', $id);
 
-        return $this->page('staff-detail', compact('report', 'timeline', 'staffUsers', 'hasAccess'));
+        return $this->page('staff-detail', compact('report', 'timeline', 'staffUsers', 'hasAccess', 'canViewDetails'));
     }
 
     public function printStaffReport(int $id): View
@@ -329,8 +332,9 @@ class CommunityController extends Controller
         $this->requireStaff();
         $report = DB::table('reports')->where('id', $id)->firstOrFail();
         $hasAccess = $this->canViewFull($report);
-        $isRestrictedWithoutAccess = $report->confidentiality === 'restricted' && ! $hasAccess;
-        $this->maskStaffReport($report, $hasAccess);
+        $canViewDetails = $this->canViewReportDetails($report, $hasAccess);
+        $isRestrictedWithoutAccess = $report->confidentiality === 'restricted' && ! $canViewDetails;
+        $this->maskStaffReport($report, $canViewDetails);
         $report->resident = $report->is_anonymous || ! $hasAccess
             ? null
             : DB::table('users')->where('id', $report->user_id)->first(['name', 'contact_number', 'email']);
@@ -338,11 +342,25 @@ class CommunityController extends Controller
             ? collect()
             : DB::table('report_status_history')->where('report_id', $id)->orderBy('created_at')->get();
         app(AuditLogger::class)->record(Auth::id(), 'printed', 'report', $id, [
-            'masked' => ! $hasAccess,
+            'masked' => ! $canViewDetails,
             'restricted' => $report->confidentiality === 'restricted',
         ]);
 
         return view('community.print-report', compact('report', 'timeline', 'hasAccess', 'isRestrictedWithoutAccess'));
+    }
+
+    public function staffReportPhoto(int $id): StreamedResponse
+    {
+        $this->requireStaff();
+        $report = DB::table('reports')->where('id', $id)->firstOrFail();
+        abort_unless($this->canViewReportDetails($report, $this->canViewFull($report)), 403);
+        abort_unless($report->photo_path, 404);
+
+        $disk = Storage::disk(config('filesystems.report_photos_disk', 'local'));
+        abort_unless($disk->exists($report->photo_path), 404);
+        app(AuditLogger::class)->record(Auth::id(), 'viewed', 'report_photo', $id);
+
+        return $disk->response($report->photo_path);
     }
 
     public function updateStaffReport(Request $request, int $id): RedirectResponse
@@ -808,9 +826,16 @@ class CommunityController extends Controller
             || DB::table('break_glass_access')->where('user_id', Auth::id())->where('report_id', $report->id)->where('expires_at', '>', now())->exists();
     }
 
-    private function maskStaffReport(object $report, bool $hasAccess): void
+    private function canViewReportDetails(object $report, bool $hasFullAccess): bool
     {
-        if ($hasAccess || (! $report->is_anonymous && $report->confidentiality === 'standard')) {
+        return $hasFullAccess
+            || $this->hasRole(Auth::id(), 'admin')
+            || (! $report->is_anonymous && $report->confidentiality === 'standard');
+    }
+
+    private function maskStaffReport(object $report, bool $canViewDetails): void
+    {
+        if ($canViewDetails) {
             return;
         }
 

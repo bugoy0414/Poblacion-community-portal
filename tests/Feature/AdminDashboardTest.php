@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class AdminDashboardTest extends TestCase
@@ -373,6 +374,112 @@ class AdminDashboardTest extends TestCase
             ->assertDontSee('data-print-report', false);
     }
 
+    public function test_admin_can_view_restricted_report_details_and_photo_without_unmasking_anonymous_identity(): void
+    {
+        Storage::fake('local');
+        config(['filesystems.report_photos_disk' => 'local']);
+        $admin = $this->createAdmin();
+        $now = now();
+        $residentId = DB::table('users')->insertGetId([
+            'name' => 'Anonymous Reporter Name',
+            'email' => 'anonymous.reporter@example.test',
+            'password' => Hash::make('ResidentPassword123!'),
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $photoPath = 'reports/restricted-photo.jpg';
+        Storage::disk('local')->put($photoPath, 'private report photo');
+        $reportId = DB::table('reports')->insertGetId([
+            'reference_no' => 'CR-2026-000011',
+            'user_id' => $residentId,
+            'title' => 'Restricted streetlight concern',
+            'category' => 'Sanitation',
+            'description' => 'The light is out beside the community hall.',
+            'address' => 'Purok 4',
+            'photo_path' => $photoPath,
+            'is_anonymous' => true,
+            'confidentiality' => 'restricted',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $this->actingAs($admin)
+            ->get("/staff/reports/{$reportId}")
+            ->assertOk()
+            ->assertSee('Restricted streetlight concern')
+            ->assertSee('The light is out beside the community hall.')
+            ->assertSee('Purok 4')
+            ->assertSee('Anonymous resident')
+            ->assertSee('Administrator read-only access')
+            ->assertSee("/staff/reports/{$reportId}/photo", false)
+            ->assertDontSee("action=\"/staff/reports/{$reportId}\"", false)
+            ->assertDontSee('Anonymous Reporter Name')
+            ->assertDontSee('anonymous.reporter@example.test');
+
+        $photoResponse = $this->get("/staff/reports/{$reportId}/photo")
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/jpeg');
+        $this->assertSame('private report photo', $photoResponse->streamedContent());
+
+        $this->actingAs($admin)
+            ->get("/staff/reports/{$reportId}/print")
+            ->assertOk()
+            ->assertSee('The light is out beside the community hall.')
+            ->assertSee('Purok 4')
+            ->assertSee("/staff/reports/{$reportId}/photo", false);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'actor_id' => $admin->id,
+            'action' => 'viewed',
+            'entity' => 'report_photo',
+            'entity_id' => (string) $reportId,
+        ]);
+    }
+
+    public function test_non_admin_staff_cannot_view_restricted_report_details_or_photo(): void
+    {
+        Storage::fake('local');
+        config(['filesystems.report_photos_disk' => 'local']);
+        $admin = $this->createAdmin();
+        $now = now();
+        $staffId = DB::table('users')->insertGetId([
+            'name' => 'Unassigned Staff',
+            'email' => 'restricted.details@example.test',
+            'password' => Hash::make('StaffPassword123!'),
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        DB::table('user_roles')->insert([
+            'user_id' => $staffId,
+            'role' => 'staff',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $photoPath = 'reports/restricted-photo.jpg';
+        Storage::disk('local')->put($photoPath, 'private report photo');
+        $reportId = DB::table('reports')->insertGetId([
+            'reference_no' => 'CR-2026-000012',
+            'user_id' => $admin->id,
+            'title' => 'Sensitive incident narrative',
+            'category' => 'Sanitation',
+            'description' => 'Details for authorized staff only.',
+            'photo_path' => $photoPath,
+            'confidentiality' => 'restricted',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $this->actingAs(User::findOrFail($staffId))
+            ->get("/staff/reports/{$reportId}")
+            ->assertOk()
+            ->assertSee('Restricted report')
+            ->assertDontSee('Sensitive incident narrative')
+            ->assertDontSee('Details for authorized staff only.')
+            ->assertDontSee("/staff/reports/{$reportId}/photo", false);
+
+        $this->get("/staff/reports/{$reportId}/photo")->assertForbidden();
+    }
+
     private function createAdmin(): User
     {
         $now = now();
@@ -389,7 +496,7 @@ class AdminDashboardTest extends TestCase
             'created_at' => $now,
             'updated_at' => $now,
         ]);
-        DB::table('categories')->insert([
+        DB::table('categories')->insertOrIgnore([
             'name' => 'Sanitation',
             'is_active' => true,
             'created_at' => $now,

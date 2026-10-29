@@ -591,7 +591,7 @@
                             <h1>{{ $report->reference_no ?? 'Report review' }}</h1>
                         </div>
                         <div class="page-heading-actions">
-                            @if ($report->confidentiality !== 'restricted' || $hasAccess)
+                            @if ($report->confidentiality !== 'restricted' || $canViewDetails)
                                 <a href="/staff/reports/{{ $report->id }}/print" class="button button-outline">Print report</a>
                             @endif
                             <a href="/staff" class="button button-outline">Back to inbox</a>
@@ -600,8 +600,17 @@
                     <div class="form-card">
                         <h2>{{ $report->title }}</h2>
                         <p><strong>Resident:</strong> {{ $report->is_anonymous ? 'Anonymous resident' : ($report->resident->name ?? 'Resident') }}</p>
+                        <p><strong>Category:</strong> {{ $report->category }}<br>
+                        <strong>Status:</strong> {{ str_replace('_', ' ', ucfirst($report->status)) }}<br>
+                        <strong>Location:</strong> {{ $report->address ?: 'Not provided' }}</p>
                         <p>{{ $report->description }}</p>
-                        @if ($report->confidentiality === 'restricted' && ! $hasAccess)
+                        @if ($report->photo_path && $canViewDetails)
+                            <figure class="report-attachment">
+                                <img src="/staff/reports/{{ $report->id }}/photo" alt="Photo attached to report {{ $report->reference_no }}" loading="lazy">
+                                <figcaption>Photo attached to this report</figcaption>
+                            </figure>
+                        @endif
+                        @if ($report->confidentiality === 'restricted' && ! $canViewDetails)
                             <div class="not-found" role="note">
                                 <b>Restricted report</b>
                                 <p>Only the assigned handler and officers may access this report. Other staff must provide a written reason of at least 20 characters for 30-minute emergency access. This access is audited and flagged for admin review.</p>
@@ -613,6 +622,11 @@
                                 </div>
                                 <button type="submit" class="button button-urgent button-wide">Request 30-minute emergency access</button>
                             </form>
+                        @elseif ($report->confidentiality === 'restricted' && ! $hasAccess)
+                            <div class="not-found" role="note">
+                                <b>Administrator read-only access</b>
+                                <p>Report details are visible for review. Only the assigned handler or an officer can make changes to this restricted report.</p>
+                            </div>
                         @else
                             <form method="post" action="/staff/reports/{{ $report->id }}">@csrf
                                 <div class="field">

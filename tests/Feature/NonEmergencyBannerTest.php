@@ -49,7 +49,7 @@ class NonEmergencyBannerTest extends TestCase
             'created_at' => $now,
             'updated_at' => $now,
         ]);
-        DB::table('categories')->insert([
+        DB::table('categories')->insertOrIgnore([
             'name' => 'Sanitation',
             'is_active' => true,
             'created_at' => $now,

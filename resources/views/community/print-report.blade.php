@@ -52,6 +52,12 @@
                     <h3>Description</h3>
                     <p>{{ $report->description }}</p>
                 </div>
+                @if ($report->photo_path)
+                    <figure class="print-report-photo">
+                        <img src="/staff/reports/{{ $report->id }}/photo" alt="Photo attached to report {{ $report->reference_no }}">
+                        <figcaption>Photo attached to this report</figcaption>
+                    </figure>
+                @endif
             </section>
 
             <section class="print-report-section">

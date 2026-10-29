@@ -27,6 +27,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/staff', [CommunityController::class, 'staffInbox']);
     Route::get('/staff/reports/{id}', [CommunityController::class, 'staffReport'])->whereNumber('id');
     Route::get('/staff/reports/{id}/print', [CommunityController::class, 'printStaffReport'])->whereNumber('id');
+    Route::get('/staff/reports/{id}/photo', [CommunityController::class, 'staffReportPhoto'])->whereNumber('id');
     Route::post('/staff/reports/{id}', [CommunityController::class, 'updateStaffReport'])->whereNumber('id');
     Route::post('/staff/reports/{id}/break-glass', [CommunityController::class, 'breakGlass'])->whereNumber('id')->middleware('throttle:5,1');
     Route::post('/staff/reports/{id}/referrals', [CommunityController::class, 'createReferral'])->whereNumber('id');
