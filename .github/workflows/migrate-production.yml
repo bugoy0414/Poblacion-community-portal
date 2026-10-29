@@ -1,0 +1,36 @@
+name: Run Production Database Migration
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    name: Run Laravel Migrations
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql, pgsql
+          tools: composer
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Run production migrations
+        env:
+          APP_ENV: production
+          APP_KEY: ${{ secrets.PRODUCTION_APP_KEY }}
+          DB_CONNECTION: pgsql
+          DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}
+          DB_PORT: ${{ secrets.PRODUCTION_DB_PORT }}
+          DB_DATABASE: ${{ secrets.PRODUCTION_DB_DATABASE }}
+          DB_USERNAME: ${{ secrets.PRODUCTION_DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+        run: php artisan migrate --force
+
