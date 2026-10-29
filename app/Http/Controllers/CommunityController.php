@@ -192,7 +192,10 @@ class CommunityController extends Controller
 
             return (int) $sequence->next_number;
         });
-        $photoPath = $request->file('photo')?->store(Auth::id(), 'local');
+        $photoPath = $request->file('photo')?->store(
+            (string) Auth::id(),
+            config('filesystems.report_photos_disk', 'local'),
+        );
         $id = DB::table('reports')->insertGetId([
             'reference_no' => sprintf('CR-%d-%06d', $year, $sequence),
             'user_id' => Auth::id(),
