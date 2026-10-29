@@ -13,17 +13,20 @@ class ProductionSeederTest extends TestCase
 
     public function test_production_seeder_is_repeatable_and_does_not_create_demo_accounts_or_reports(): void
     {
+        DB::table('categories')->delete();
         $this->seed(ProductionSeeder::class);
         DB::table('categories')->where('name', 'Sanitation')->update(['is_active' => false]);
         DB::table('urgent_keywords')->where('keyword', 'fire')->update(['language' => 'custom']);
         $this->seed(ProductionSeeder::class);
 
-        $this->assertDatabaseCount('categories', 7);
+        $this->assertDatabaseCount('categories', 13);
         $this->assertDatabaseCount('site_settings', 1);
         $this->assertDatabaseCount('urgent_keywords', 13);
         $this->assertDatabaseCount('users', 0);
         $this->assertDatabaseCount('reports', 0);
         $this->assertDatabaseHas('categories', ['name' => 'Sanitation', 'is_active' => false]);
+        $this->assertDatabaseHas('categories', ['name' => 'Water Supply', 'is_active' => true]);
+        $this->assertDatabaseHas('categories', ['name' => 'Public Health', 'is_active' => true]);
         $this->assertDatabaseHas('urgent_keywords', ['keyword' => 'fire', 'language' => 'custom']);
     }
 }

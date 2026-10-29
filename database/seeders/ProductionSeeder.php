@@ -10,13 +10,19 @@ class ProductionSeeder extends Seeder
     public function run(): void
     {
         foreach ([
-            'Peace & Order',
-            'Sanitation',
-            'Road/Infrastructure',
+            'Animal Concerns',
+            'Electricity',
+            'Fire/Emergency',
             'Flooding',
             'Noise',
-            'Fire/Emergency',
             'Other',
+            'Peace & Order',
+            'Public Facilities',
+            'Public Health',
+            'Road/Infrastructure',
+            'Sanitation',
+            'Social Services',
+            'Water Supply',
         ] as $name) {
             DB::table('categories')->insertOrIgnore([
                 'name' => $name,
